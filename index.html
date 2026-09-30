@@ -1,1 +1,582 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タスク管理アプリ</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar for task list */
+        .task-list-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .task-list-container::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .task-list-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .task-list-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        
+        /* Modal Animation */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 300ms, transform 300ms;
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col">
 
+    <!-- Header Area -->
+    <header class="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-2xl font-bold"><i class="fas fa-check-square mr-2"></i>Task Manager</h1>
+        <div id="auth-container">
+            <!-- Login Button -->
+            <button id="login-btn" class="bg-white text-blue-600 px-4 py-2 rounded shadow hover:bg-gray-100 transition duration-200">
+                <i class="fab fa-google mr-2"></i> Googleでログイン
+            </button>
+            
+            <!-- User Info (Hidden by default) -->
+            <div id="user-info" class="hidden flex items-center gap-4">
+                <span id="user-name" class="font-medium text-sm hidden md:inline"></span>
+                <img id="user-avatar" src="" alt="User Avatar" class="w-8 h-8 rounded-full border-2 border-white hidden md:block">
+                <button id="logout-btn" class="bg-blue-700 text-white px-3 py-1.5 text-sm rounded shadow hover:bg-blue-800 transition duration-200">
+                    ログアウト
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow flex flex-col items-center p-4 sm:p-6 overflow-hidden">
+        
+        <!-- App Container (Shown only when logged in) -->
+        <div id="app-container" class="hidden w-full max-w-2xl bg-white rounded-lg shadow-xl flex-grow flex flex-col overflow-hidden">
+            
+            <!-- Input Area -->
+            <div class="p-4 sm:p-6 border-b border-gray-200 bg-gray-50">
+                <form id="task-form" class="flex gap-2">
+                    <input type="text" id="task-input" required placeholder="新しいタスクを入力..." 
+                           class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg">
+                    <button type="submit" 
+                            class="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition duration-200 font-bold whitespace-nowrap">
+                        追加
+                    </button>
+                </form>
+            </div>
+
+            <!-- Task List Area -->
+            <div class="flex-grow overflow-y-auto task-list-container p-2 sm:p-4">
+                <ul id="task-list" class="space-y-3">
+                    <!-- Tasks will be injected here by JavaScript -->
+                    <li id="loading-indicator" class="text-center text-gray-500 py-8 hidden">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>タスクを読み込み中...
+                    </li>
+                    <li id="empty-state" class="text-center text-gray-400 py-12 hidden">
+                        <i class="fas fa-clipboard-list text-5xl mb-4 text-gray-300"></i><br>
+                        <p class="text-lg">タスクがありません</p>
+                        <p class="text-sm">上の入力欄から新しいタスクを追加してください。</p>
+                    </li>
+                </ul>
+            </div>
+            
+            <!-- Footer Stats -->
+            <div class="bg-gray-100 p-3 text-xs text-gray-500 text-center border-t border-gray-200 flex justify-between px-6">
+                <span id="total-tasks-count">総タスク: 0</span>
+                <span id="completed-tasks-count">完了: 0</span>
+            </div>
+        </div>
+
+        <!-- Login Prompt (Shown when logged out) -->
+        <div id="login-prompt" class="w-full max-w-md mt-20 text-center">
+            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+                <i class="fas fa-tasks text-6xl text-blue-500 mb-6"></i>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">タスクを管理しましょう</h2>
+                <p class="text-gray-600 mb-8">
+                    タスクを保存して、どのデバイスからでもアクセスするにはログインしてください。
+                </p>
+                <button id="prompt-login-btn" class="w-full bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg shadow-sm hover:bg-gray-50 transition duration-200 flex items-center justify-center font-medium">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" class="w-6 h-6 mr-3">
+                    Google アカウントでログイン
+                </button>
+            </div>
+        </div>
+        
+        <!-- Custom Message Modal -->
+        <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-95 transition-transform duration-300" id="message-modal-content">
+                <h3 class="text-lg font-bold mb-2 text-gray-800" id="message-title">Message</h3>
+                <p class="text-gray-600 mb-6" id="message-text">Description</p>
+                <div class="flex justify-end">
+                    <button id="message-close-btn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">OK</button>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithPopup, 
+            GoogleAuthProvider, 
+            signOut, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            doc, 
+            updateDoc, 
+            deleteDoc, 
+            query, 
+            orderBy, 
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // FIREBASE CONFIGURATION
+        // ※ ここに提供されたFirebaseの設定を貼り付けてください
+        // ==========================================
+        const firebaseConfig = {
+            // 例:
+            // apiKey: "YOUR_API_KEY",
+            // authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            // projectId: "YOUR_PROJECT_ID",
+            // storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            // messagingSenderId: "YOUR_SENDER_ID",
+            // appId: "YOUR_APP_ID"
+        };
+        
+        // IMPORTANT: GitHub Pagesで動作させるため、configが空の場合はダミー動作するようフォールバック
+        const hasValidConfig = firebaseConfig.apiKey !== undefined;
+
+        // Initialize Firebase
+        let app, auth, db;
+        
+        if (hasValidConfig) {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+            } catch (e) {
+                console.error("Firebase initialization error:", e);
+                showModal("エラー", "Firebaseの初期化に失敗しました。設定を確認してください。");
+            }
+        } else {
+            console.warn("Firebase config is empty. App will run in memory-only demo mode.");
+        }
+
+        // DOM Elements
+        const loginBtn = document.getElementById('login-btn');
+        const promptLoginBtn = document.getElementById('prompt-login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userInfo = document.getElementById('user-info');
+        const userName = document.getElementById('user-name');
+        const userAvatar = document.getElementById('user-avatar');
+        
+        const appContainer = document.getElementById('app-container');
+        const loginPrompt = document.getElementById('login-prompt');
+        
+        const taskForm = document.getElementById('task-form');
+        const taskInput = document.getElementById('task-input');
+        const taskList = document.getElementById('task-list');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const emptyState = document.getElementById('empty-state');
+        
+        const totalTasksCount = document.getElementById('total-tasks-count');
+        const completedTasksCount = document.getElementById('completed-tasks-count');
+
+        // Modal Elements
+        const modal = document.getElementById('message-modal');
+        const modalContent = document.getElementById('message-modal-content');
+        const modalTitle = document.getElementById('message-title');
+        const modalText = document.getElementById('message-text');
+        const modalCloseBtn = document.getElementById('message-close-btn');
+
+        // State
+        let currentUser = null;
+        let unsubscribeTasks = null;
+        let demoTasks = []; // For demo mode when config is missing
+
+        // Custom Modal Function (Replacement for alert/confirm)
+        function showModal(title, text, isConfirm = false, onConfirm = null) {
+            modalTitle.textContent = title;
+            modalText.textContent = text;
+            
+            modalCloseBtn.textContent = isConfirm ? 'キャンセル' : 'OK';
+            modalCloseBtn.onclick = () => hideModal();
+
+            if (isConfirm) {
+                // Add confirm button dynamically if needed
+                let confirmBtn = document.getElementById('modal-confirm-btn');
+                if (!confirmBtn) {
+                    confirmBtn = document.createElement('button');
+                    confirmBtn.id = 'modal-confirm-btn';
+                    confirmBtn.className = 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition ml-2';
+                    confirmBtn.textContent = '削除する';
+                    modalCloseBtn.parentNode.appendChild(confirmBtn);
+                }
+                confirmBtn.style.display = 'block';
+                confirmBtn.onclick = () => {
+                    if (onConfirm) onConfirm();
+                    hideModal();
+                };
+            } else {
+                const confirmBtn = document.getElementById('modal-confirm-btn');
+                if (confirmBtn) confirmBtn.style.display = 'none';
+            }
+
+            modal.classList.remove('hidden');
+            // Trigger reflow
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-95');
+        }
+
+        function hideModal() {
+            modal.classList.add('opacity-0');
+            modalContent.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300); // match duration-300
+        }
+
+        // Update UI based on auth state
+        function updateUI(user) {
+            if (user) {
+                // Logged in
+                loginBtn.classList.add('hidden');
+                userInfo.classList.remove('hidden');
+                
+                userName.textContent = user.displayName || 'User';
+                if (user.photoURL) {
+                    userAvatar.src = user.photoURL;
+                } else {
+                    // Fallback avatar
+                    userAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=0D8ABC&color=fff`;
+                }
+
+                loginPrompt.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                
+                if (hasValidConfig) {
+                    loadTasks(user.uid);
+                } else {
+                    renderDemoTasks();
+                }
+            } else {
+                // Logged out
+                loginBtn.classList.remove('hidden');
+                userInfo.classList.add('hidden');
+                
+                loginPrompt.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                
+                if (unsubscribeTasks) {
+                    unsubscribeTasks();
+                    unsubscribeTasks = null;
+                }
+                taskList.innerHTML = '';
+            }
+        }
+
+        // Authentication Functions
+        const login = async () => {
+            if (!hasValidConfig) {
+                showModal("デモモード", "Firebase設定がないため、デモユーザーとしてログインします。データは保存されません。");
+                currentUser = { uid: 'demo-user', displayName: 'Demo User' };
+                updateUI(currentUser);
+                return;
+            }
+
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Login error:", error);
+                showModal("ログインエラー", "ログイン中にエラーが発生しました: " + error.message);
+            }
+        };
+
+        const logout = async () => {
+            if (!hasValidConfig) {
+                currentUser = null;
+                demoTasks = [];
+                updateUI(null);
+                return;
+            }
+
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Logout error:", error);
+                showModal("エラー", "ログアウトに失敗しました。");
+            }
+        };
+
+        // Event Listeners for Auth
+        loginBtn.addEventListener('click', login);
+        promptLoginBtn.addEventListener('click', login);
+        logoutBtn.addEventListener('click', logout);
+
+        // Listen for auth state changes
+        if (hasValidConfig) {
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                updateUI(user);
+            });
+        }
+
+        // Task Operations
+        
+        // --- 1. Load Tasks (Read) ---
+        function loadTasks(userId) {
+            loadingIndicator.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            
+            // Clean up previous listener
+            if (unsubscribeTasks) {
+                unsubscribeTasks();
+            }
+
+            // Reference to user's tasks subcollection
+            // Path: /artifacts/{appId}/users/{userId}/tasks
+            // * Note: For a general web app not in this specific immersive environment, 
+            // you might just use `users/${userId}/tasks`.
+            
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-task-app';
+            const tasksRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
+            
+            // NOTE: Firestore requires an index if combining sorting and equality queries.
+            // To keep it simple and robust without requiring manual index creation in Firebase Console,
+            // we'll fetch all and sort in memory, or just rely on serverTimestamp insertion order.
+            
+            unsubscribeTasks = onSnapshot(tasksRef, (snapshot) => {
+                loadingIndicator.classList.add('hidden');
+                
+                const tasks = [];
+                snapshot.forEach((doc) => {
+                    tasks.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Sort tasks: Incomplete first, then by creation date (newest first)
+                tasks.sort((a, b) => {
+                    if (a.completed === b.completed) {
+                        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
+                        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
+                        return timeB - timeA;
+                    }
+                    return a.completed ? 1 : -1;
+                });
+
+                renderTasks(tasks);
+                updateStats(tasks);
+                
+            }, (error) => {
+                console.error("Error loading tasks:", error);
+                loadingIndicator.classList.add('hidden');
+                showModal("エラー", "タスクの読み込みに失敗しました。権限設定を確認してください。");
+            });
+        }
+
+        // --- 2. Add Task (Create) ---
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = taskInput.value.trim();
+            if (!text || !currentUser) return;
+            
+            taskInput.value = ''; // clear input early
+
+            if (!hasValidConfig) {
+                addDemoTask(text);
+                return;
+            }
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-task-app';
+            const tasksRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks');
+
+            try {
+                await addDoc(tasksRef, {
+                    text: text,
+                    completed: false,
+                    createdAt: serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error adding task:", error);
+                showModal("エラー", "タスクの追加に失敗しました。");
+                taskInput.value = text; // restore input on failure
+            }
+        });
+
+        // --- 3. Toggle Task Status (Update) ---
+        window.toggleTask = async (taskId, currentStatus) => {
+            if (!hasValidConfig) {
+                toggleDemoTask(taskId);
+                return;
+            }
+
+            if (!currentUser) return;
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-task-app';
+            const taskRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', taskId);
+
+            try {
+                await updateDoc(taskRef, {
+                    completed: !currentStatus
+                });
+            } catch (error) {
+                console.error("Error updating task:", error);
+                showModal("エラー", "タスクの更新に失敗しました。");
+            }
+        };
+
+        // --- 4. Delete Task (Delete) ---
+        window.deleteTask = (taskId) => {
+            if (!currentUser) return;
+
+            showModal(
+                "タスクの削除", 
+                "このタスクを削除してもよろしいですか？", 
+                true, 
+                async () => {
+                    if (!hasValidConfig) {
+                        deleteDemoTask(taskId);
+                        return;
+                    }
+
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-task-app';
+                    const taskRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', taskId);
+
+                    try {
+                        await deleteDoc(taskRef);
+                    } catch (error) {
+                        console.error("Error deleting task:", error);
+                        showModal("エラー", "タスクの削除に失敗しました。");
+                    }
+                }
+            );
+        };
+
+        // UI Rendering
+        function renderTasks(tasks) {
+            // Remove all items except loading and empty state
+            Array.from(taskList.children).forEach(child => {
+                if (child.id !== 'loading-indicator' && child.id !== 'empty-state') {
+                    taskList.removeChild(child);
+                }
+            });
+
+            if (tasks.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+
+            tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = `flex items-center justify-between p-3 sm:p-4 rounded-lg border shadow-sm transition-all duration-200 group ${task.completed ? 'bg-gray-50 border-gray-200' : 'bg-white border-blue-100 hover:border-blue-300'}`;
+                
+                const textStyle = task.completed ? 'line-through text-gray-400' : 'text-gray-800 font-medium';
+                const checkColor = task.completed ? 'text-green-500' : 'text-gray-300 hover:text-blue-500 cursor-pointer';
+                
+                // Using onclick attribute for simplicity in this generated file. 
+                // Functions are exposed to global window object above.
+                li.innerHTML = `
+                    <div class="flex items-center gap-3 flex-grow overflow-hidden cursor-pointer" onclick="toggleTask('${task.id}', ${task.completed})">
+                        <div class="flex-shrink-0 text-xl transition-colors duration-200 ${checkColor}">
+                            <i class="fa-${task.completed ? 'solid fa-circle-check' : 'regular fa-circle'}"></i>
+                        </div>
+                        <span class="break-words truncate w-full ${textStyle} transition-all duration-200 select-none">
+                            ${escapeHTML(task.text)}
+                        </span>
+                    </div>
+                    <button onclick="deleteTask('${task.id}')" 
+                            class="flex-shrink-0 ml-4 text-gray-400 hover:text-red-500 focus:outline-none p-2 rounded-full hover:bg-red-50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                `;
+                taskList.appendChild(li);
+            });
+        }
+
+        function updateStats(tasks) {
+            const total = tasks.length;
+            const completed = tasks.filter(t => t.completed).length;
+            totalTasksCount.textContent = `総タスク: ${total}`;
+            completedTasksCount.textContent = `完了: ${completed}`;
+        }
+
+        // Utility to prevent XSS
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+
+        // ==========================================
+        // DEMO MODE FUNCTIONS (Used when Firebase config is empty)
+        // ==========================================
+        function addDemoTask(text) {
+            const newTask = {
+                id: 'demo_' + Date.now(),
+                text: text,
+                completed: false,
+                createdAt: Date.now()
+            };
+            demoTasks.unshift(newTask);
+            renderDemoTasks();
+        }
+
+        function toggleDemoTask(taskId) {
+            const task = demoTasks.find(t => t.id === taskId);
+            if (task) {
+                task.completed = !task.completed;
+                renderDemoTasks();
+            }
+        }
+
+        function deleteDemoTask(taskId) {
+            demoTasks = demoTasks.filter(t => t.id !== taskId);
+            renderDemoTasks();
+        }
+
+        function renderDemoTasks() {
+            // Sort demo tasks similarly
+            const sorted = [...demoTasks].sort((a, b) => {
+                if (a.completed === b.completed) return b.createdAt - a.createdAt;
+                return a.completed ? 1 : -1;
+            });
+            renderTasks(sorted);
+            updateStats(sorted);
+        }
+
+    </script>
+</body>
+</html>
